@@ -7,3 +7,5 @@ Convert png as height map to stl
 
 # TODO
 * flip normals
+* Documentation
+* Add tests

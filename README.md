@@ -10,6 +10,7 @@ Convert png as height map to stl
   	     Have a "bug" of the size of the shape
 	     
 # TODO
+* Fix bug - does not seem to generate watertight geometry
 * flip normals
 * Documentation
 * Add tests

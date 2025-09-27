@@ -3,7 +3,7 @@ import argparse
 import cv2
 import numpy as np
 from stl import mesh
-from typing import Sequence
+from collections.abc import Sequence
 import structlog
 
 
@@ -11,18 +11,44 @@ logger = structlog.get_logger()
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='convert image to stl height map')
-    parser.add_argument('--image',type=str, help='input image file path', required=True)
-    parser.add_argument('--outstl',type=str, help='output model file path', default='out.stl')
-    parser.add_argument('--size', type=int, nargs=2, default=(40,40),
-                        help='dimension of the model width x height in mm')
-    parser.add_argument('--height', type=float, default=8, help='height of the model in mm')
-    parser.add_argument('--pic_height', type=float, default=2, help='height of the height-field / engraving')
-    parser.add_argument('--engrave', action='store_true')
-    parser.add_argument('--nonrect', action='store_true', help="""If set, zero value in the image that surrounds the main shape are not included in the shape. 
-    Used for non rectangular boundary""")
-    parser.add_argument('--nobottom', action='store_true', help='If set, do not generate a bottom')
-    parser.add_argument('--noside', action='store_true', help='If set, do not generate sides. Implies --nobottom')
+    parser = argparse.ArgumentParser(description="convert image to stl height map")
+    parser.add_argument(
+        "--image", type=str, help="input image file path", required=True
+    )
+    parser.add_argument(
+        "--outstl", type=str, help="output model file path", default="out.stl"
+    )
+    parser.add_argument(
+        "--size",
+        type=int,
+        nargs=2,
+        default=(40, 40),
+        help="dimension of the model width x height in mm",
+    )
+    parser.add_argument(
+        "--height", type=float, default=8, help="height of the model in mm"
+    )
+    parser.add_argument(
+        "--pic_height",
+        type=float,
+        default=2,
+        help="height of the height-field / engraving",
+    )
+    parser.add_argument("--engrave", action="store_true")
+    parser.add_argument(
+        "--nonrect",
+        action="store_true",
+        help="""If set, zero value in the image that surrounds the main shape are not included in the shape.
+    Used for non rectangular boundary""",
+    )
+    parser.add_argument(
+        "--nobottom", action="store_true", help="If set, do not generate a bottom"
+    )
+    parser.add_argument(
+        "--noside",
+        action="store_true",
+        help="If set, do not generate sides. Implies --nobottom",
+    )
 
     args = parser.parse_args()
     return args
@@ -31,11 +57,12 @@ def parse_args():
 def quadsplit(quad: Sequence[float]) -> list[list[float]]:
     """Split ccw quad to two triangles"""
     v1, v2, v3, v4 = quad
-    return [
-        [v1, v2, v3],
-        [v3, v4, v1]]
+    return [[v1, v2, v3], [v3, v4, v1]]
 
-def boundary_aware_quad_gen(im_is_in_shape: np.ndarray, u: int, v: int) -> list[list[int]]:
+
+def boundary_aware_quad_gen(
+    im_is_in_shape: np.ndarray, u: int, v: int
+) -> list[list[int]]:
     """
     generate 0, 1 or 2 CCW triangles
     if on the boundayr, try both splitting option and generate the one with most triangles
@@ -47,15 +74,13 @@ def boundary_aware_quad_gen(im_is_in_shape: np.ndarray, u: int, v: int) -> list[
         """coordinate to index"""
         return v * iw + u
 
-    vertices = [c2i(u, v), c2i(u+1, v), c2i(u+1, v+1), c2i(u, v+1)]
-    inside = [im[v, u], im[v, u+1], im[v+1, u+1], im[v+1, u]]
-    v1,v2,v3,v4 = vertices
+    vertices = [c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)]
+    inside = [im[v, u], im[v, u + 1], im[v + 1, u + 1], im[v + 1, u]]
+    v1, v2, v3, v4 = vertices
     if all(inside):
-        return [
-        [v1, v2, v3],
-        [v3, v4, v1]]
+        return [[v1, v2, v3], [v3, v4, v1]]
     else:
-        triangles = [[0,1,2], [2,3,0], [0,1,3], [1,2,3]]
+        triangles = [[0, 1, 2], [2, 3, 0], [0, 1, 3], [1, 2, 3]]
         trinagles = list(filter(lambda t: all(inside[x] for x in t), triangles))
         triangles = [[vertices[x] for x in t] for t in trinagles]
         assert len(trinagles) < 2
@@ -72,22 +97,32 @@ def flip(t: Sequence[float]) -> list[float]:
 
 class Im2stl:
     """
-        Args:
-          im - input image
-          size - output width, height in mm
-          heightfield_height - max "z" value for the color white (255)
-          shape_height - "z" value for the color black (0)
-          engrave - if set, carve the heightfield from the shape
-          nobottom - do not generate the bottom face
-          noside - do not generate the sides
+    Args:
+      im - input image
+      size - output width, height in mm
+      heightfield_height - max "z" value for the color white (255)
+      shape_height - "z" value for the color black (0)
+      engrave - if set, carve the heightfield from the shape
+      nobottom - do not generate the bottom face
+      noside - do not generate the sides
 
 
-        1. find the boundaries in the image
-        2. mark the boundary edges
-        3. Generate height field for the top & bottom
-        4. Generate the boundary
+    1. find the boundaries in the image
+    2. mark the boundary edges
+    3. Generate height field for the top & bottom
+    4. Generate the boundary
     """
-    def __init__(self, im: np.ndarray, size: tuple, heightfield_height: int, shape_height: int, engrave: bool = False, nobottom: bool = False, noside: bool = False):
+
+    def __init__(
+        self,
+        im: np.ndarray,
+        size: tuple,
+        heightfield_height: int,
+        shape_height: int,
+        engrave: bool = False,
+        nobottom: bool = False,
+        noside: bool = False,
+    ):
         self.im = im
         self.size = size
         self.heightfield_height = heightfield_height
@@ -106,8 +141,8 @@ class Im2stl:
             self.dheight = self.height1
 
         # output vertices and faces
-        self.V = []
-        self.F = []
+        self.V: np.ndarray
+        self.F: np.ndarray
 
     def get_stl(self):
         self.update_contours()
@@ -117,20 +152,21 @@ class Im2stl:
         self.to_numpy()
         return self.V, self.F
 
-
     def update_contours(self):
         _, imbw = cv2.threshold(self.im.copy(), 1, 255, cv2.THRESH_BINARY)
-#        cv2.imshow("bw", imbw)
-#        cv2.waitKey(1)
-        contours, hierarchy = cv2.findContours(imbw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        #        cv2.imshow("bw", imbw)
+        #        cv2.waitKey(1)
+        contours, hierarchy = cv2.findContours(
+            imbw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+        )
         if not contours:
             ih, iw = imbw.shape
-            rect = np.array([[[0, 0]],
-                             [[iw - 1, 0]],
-                             [[iw - 1, ih - 1]],
-                             [[0, ih - 1]]], dtype=np.int32)
+            rect = np.array(
+                [[[0, 0]], [[iw - 1, 0]], [[iw - 1, ih - 1]], [[0, ih - 1]]],
+                dtype=np.int32,
+            )
             contours = [rect]
-            hierarchy = np.array([[[ -1, -1, -1, -1 ]]], dtype=np.int32)
+            hierarchy = np.array([[[-1, -1, -1, -1]]], dtype=np.int32)
         # contourimage = np.zeros(imbw.shape)
         # cv2.drawContours(contourimage, contours, -1, 255, lineType=cv2.LINE_8)
         # cv2.imshow("cont", contourimage)
@@ -155,7 +191,7 @@ class Im2stl:
         def c2i(u, v):
             """coordinate to index"""
             return v * iw + u
-        
+
         X, Y = np.meshgrid(range(iw), range(ih))
         X = X.reshape(-1)
         Y = Y.reshape(-1)
@@ -169,12 +205,12 @@ class Im2stl:
         hfactor = heightfield_height / dheight
         for i, (x, y) in enumerate(zip(X, Y)):
             Z[i] = (im[y, x] - height0) * hfactor
-            
+
         if self.engrave:
             Z = shape_height - Z
         else:
             Z = shape_height + Z
-        
+
         faces = []
         for v in range(ih - 1):
             for u in range(iw - 1):
@@ -192,7 +228,7 @@ class Im2stl:
         X = np.concatenate([X, Xlow])
         Y = np.concatenate([Y, Ylow])
         Z = np.concatenate([Z, Zlow])
-        
+
         X = X * w / iw
         Y = Y * h / ih
 
@@ -225,17 +261,24 @@ class Im2stl:
             v2idx = self.c2i(x2, y2, False)
             v3idx = self.c2i(x2, y2, True)
             v4idx = self.c2i(x1, y1, True)
-            
+
             triangles = quadsplit([v1idx, v2idx, v3idx, v4idx])
             sfaces.extend(triangles)
         self.F.extend(sfaces)
 
     def to_numpy(self):
         self.F = np.array(self.F, dtype=np.int32)
-        
 
-    
-def im2stl(im: np.ndarray, size: tuple, heightfield_height: int, shape_height: int, engrave: bool = False, nobottom: bool = False, noside: bool = False):
+
+def im2stl(
+    im: np.ndarray,
+    size: tuple,
+    heightfield_height: int,
+    shape_height: int,
+    engrave: bool = False,
+    nobottom: bool = False,
+    noside: bool = False,
+):
     w, h = size
     height0 = im.min()
     height1 = im.max()
@@ -265,25 +308,30 @@ def im2stl(im: np.ndarray, size: tuple, heightfield_height: int, shape_height: i
         Z = shape_height - Z
     else:
         Z = shape_height + Z
-        
 
     faces = []
     for v in range(ih - 1):
         for u in range(iw - 1):
-            faces.extend(quadsplit([c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)]))
+            faces.extend(
+                quadsplit([c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)])
+            )
 
     # Close the shape
     if not noside:
         X1 = [0, iw, 0, iw]
-        Y1 = [0,  0, ih, ih]
-        Z1 = [0,  0,  0,  0]
+        Y1 = [0, 0, ih, ih]
+        Z1 = [0, 0, 0, 0]
         F1 = []
 
         if not nobottom:
-            F1.extend(quadsplit([nVertices, nVertices + 2 , nVertices + 3, nVertices + 1]))
-        F1.extend(quadsplit([nVertices, nVertices + 1 , iw - 1, 0]))
+            F1.extend(
+                quadsplit([nVertices, nVertices + 2, nVertices + 3, nVertices + 1])
+            )
+        F1.extend(quadsplit([nVertices, nVertices + 1, iw - 1, 0]))
         F1.extend(quadsplit([nVertices + 2, nVertices, 0, nVertices - iw]))
-        F1.extend(quadsplit([nVertices + 2, nVertices - iw, nVertices - 1, nVertices + 3]))
+        F1.extend(
+            quadsplit([nVertices + 2, nVertices - iw, nVertices - 1, nVertices + 3])
+        )
         F1.extend(quadsplit([nVertices + 1, nVertices + 3, nVertices - 1, iw - 1]))
 
         X = np.concatenate([X, np.array(X1)])
@@ -309,17 +357,34 @@ def save_stl(outpath, V, F):
 
 
 def main():
+    logger.info("png2stl V1.1")
     args = parse_args()
     im = cv2.imread(args.image, cv2.IMREAD_GRAYSCALE)
 
     if args.nonrect:
-        converter = Im2stl(im, args.size, args.pic_height, args.height, args.engrave, args.nobottom, args.noside)
+        converter = Im2stl(
+            im,
+            args.size,
+            args.pic_height,
+            args.height,
+            args.engrave,
+            args.nobottom,
+            args.noside,
+        )
         V, F = converter.get_stl()
     else:
-        V, F = im2stl(im, args.size, args.pic_height, args.height, args.engrave, args.nobottom, args.noside)
+        V, F = im2stl(
+            im,
+            args.size,
+            args.pic_height,
+            args.height,
+            args.engrave,
+            args.nobottom,
+            args.noside,
+        )
 
     save_stl(args.outstl, V, F)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

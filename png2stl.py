@@ -45,9 +45,9 @@ def parse_args():
         "--nobottom", action="store_true", help="If set, do not generate a bottom"
     )
     parser.add_argument(
-        "--noside",
+        "--noboundary",
         action="store_true",
-        help="If set, do not generate sides. Implies --nobottom",
+        help="If set, generate only the top geometry. Implies --nobottom",
     )
 
     args = parser.parse_args()
@@ -104,7 +104,7 @@ class Im2stl:
       shape_height - "z" value for the color black (0)
       engrave - if set, carve the heightfield from the shape
       nobottom - do not generate the bottom face
-      noside - do not generate the sides
+      noboundary - do not generate the sides
 
 
     1. find the boundaries in the image
@@ -121,15 +121,15 @@ class Im2stl:
         shape_height: int,
         engrave: bool = False,
         nobottom: bool = False,
-        noside: bool = False,
+        noboundary: bool = False,
     ):
         self.im = im
         self.size = size
         self.heightfield_height = heightfield_height
         self.shape_height = shape_height
         self.engrave = engrave
-        self.nobottom = nobottom or noside
-        self.noside = noside
+        self.nobottom = nobottom or noboundary
+        self.noboundary = noboundary
 
         self.height0 = im.min()
         self.height1 = im.max()
@@ -147,7 +147,7 @@ class Im2stl:
     def get_stl(self):
         self.update_contours()
         self.generate_top()
-        if not self.noside:
+        if not self.noboundary:
             self.generate_sides()
         self.to_numpy()
         return self.V, self.F
@@ -186,7 +186,7 @@ class Im2stl:
         logger.info(f"Image resolution: {iw} x {ih}")
         logger.info(f"object height: {shape_height}")
         logger.info(f"engrave: {self.engrave}, h: {heightfield_height}")
-        logger.info(f"Nobottom: {self.nobottom}, noside: {self.noside}")
+        logger.info(f"Nobottom: {self.nobottom}, noboundary: {self.noboundary}")
 
         def c2i(u, v):
             """coordinate to index"""
@@ -277,19 +277,19 @@ def im2stl(
     shape_height: int,
     engrave: bool = False,
     nobottom: bool = False,
-    noside: bool = False,
+    noboundary: bool = False,
 ):
     w, h = size
     height0 = im.min()
     height1 = im.max()
     dheight = height1 - height0
     ih, iw = im.shape
-    nobottom = nobottom or noside
+    nobottom = nobottom or noboundary
 
     logger.info(f"Image resolution: {iw} x {ih}")
     logger.info(f"object height: {shape_height}")
     logger.info(f"engrave: {engrave}, h: {heightfield_height}")
-    logger.info(f"Nobottom: {nobottom}, noside: {noside}")
+    logger.info(f"Nobottom: {nobottom}, noboundary: {noboundary}")
 
     def c2i(u, v):
         """coordinate to index"""
@@ -317,7 +317,7 @@ def im2stl(
             )
 
     # Close the shape
-    if not noside:
+    if not noboundary:
         X1 = [0, iw, 0, iw]
         Y1 = [0, 0, ih, ih]
         Z1 = [0, 0, 0, 0]
@@ -369,7 +369,7 @@ def main():
             args.height,
             args.engrave,
             args.nobottom,
-            args.noside,
+            args.noboundary,
         )
         V, F = converter.get_stl()
     else:
@@ -380,7 +380,7 @@ def main():
             args.height,
             args.engrave,
             args.nobottom,
-            args.noside,
+            args.noboundary,
         )
 
     save_stl(args.outstl, V, F)

@@ -223,14 +223,14 @@ class Im2stl:
                         triangles_bottom.append([ti + bottom_start for ti in t])
                     triangles_bottom = [flip(t) for t in triangles_bottom]
                     if len(triangles_bottom) > 0:
-                        triangles.extend(triangles_bottom)
+                        faces.extend(triangles_bottom)
 
         X = np.concatenate([X, Xlow])
         Y = np.concatenate([Y, Ylow])
         Z = np.concatenate([Z, Zlow])
 
         X = X * w / iw
-        Y = Y * h / ih
+        Y = (ih - 1 - Y) * h / ih
 
         self.V = np.vstack([X, Y, Z]).transpose()
         self.F = faces
@@ -339,7 +339,7 @@ def im2stl(
         Z = np.concatenate([Z, np.array(Z1)])
 
         X = X * w / iw
-        Y = Y * h / ih
+        Y = (ih - 1 - Y) * h / ih
         faces.extend(F1)
 
     F = np.array(faces)

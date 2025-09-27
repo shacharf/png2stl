@@ -105,7 +105,6 @@ class Im2stl:
                 raise ValueError("Empty input image - aborting")
             self.dheight = self.height1
 
-        logger.info(f"height0: {self.height0}, height1: {self.height1}, dheight: {self.dheight}")
         # output vertices and faces
         self.V = []
         self.F = []
@@ -151,7 +150,8 @@ class Im2stl:
         logger.info(f"Image resolution: {iw} x {ih}")
         logger.info(f"object height: {shape_height}")
         logger.info(f"engrave: {self.engrave}, h: {heightfield_height}")
-        
+        logger.info(f"Nobottom: {self.nobottom}, noside: {self.noside}")
+
         def c2i(u, v):
             """coordinate to index"""
             return v * iw + u
@@ -235,16 +235,18 @@ class Im2stl:
         
 
     
-def im2stl(im: np.ndarray, size: tuple, heightfield_height: int, shape_height: int, engrave: bool = False):
+def im2stl(im: np.ndarray, size: tuple, heightfield_height: int, shape_height: int, engrave: bool = False, nobottom: bool = False, noside: bool = False):
     w, h = size
     height0 = im.min()
     height1 = im.max()
     dheight = height1 - height0
     ih, iw = im.shape
+    nobottom = nobottom or noside
 
-    print(f"Image resolution: {iw} x {ih}")
-    print(f"object height: {shape_height}")
-    print(f"engrave: {engrave}, h: {heightfield_height}")
+    logger.info(f"Image resolution: {iw} x {ih}")
+    logger.info(f"object height: {shape_height}")
+    logger.info(f"engrave: {engrave}, h: {heightfield_height}")
+    logger.info(f"Nobottom: {nobottom}, noside: {noside}")
 
     def c2i(u, v):
         """coordinate to index"""
@@ -269,27 +271,28 @@ def im2stl(im: np.ndarray, size: tuple, heightfield_height: int, shape_height: i
     for v in range(ih - 1):
         for u in range(iw - 1):
             faces.extend(quadsplit([c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)]))
-            # faces.append([c2i(u, v), c2i(u + 1, v + 1), c2i(u + 1, v)])
-            # faces.append([c2i(u, v), c2i(u, v + 1), c2i(u + 1, v + 1)])
 
     # Close the shape
-    X1 = [0, iw, 0, iw]
-    Y1 = [0,  0, ih, ih]
-    Z1 = [0,  0,  0,  0]
-    F1 = []
-    F1.extend(quadsplit([nVertices, nVertices + 2 , nVertices + 3, nVertices + 1]))
-    F1.extend(quadsplit([nVertices, nVertices + 1 , iw - 1, 0]))
-    F1.extend(quadsplit([nVertices + 2, nVertices, 0, nVertices - iw]))
-    F1.extend(quadsplit([nVertices + 2, nVertices - iw, nVertices - 1, nVertices + 3]))
-    F1.extend(quadsplit([nVertices + 1, nVertices + 3, nVertices - 1, iw - 1]))
+    if not noside:
+        X1 = [0, iw, 0, iw]
+        Y1 = [0,  0, ih, ih]
+        Z1 = [0,  0,  0,  0]
+        F1 = []
 
-    X = np.concatenate([X, np.array(X1)])
-    Y = np.concatenate([Y, np.array(Y1)])
-    Z = np.concatenate([Z, np.array(Z1)])
+        if not nobottom:
+            F1.extend(quadsplit([nVertices, nVertices + 2 , nVertices + 3, nVertices + 1]))
+        F1.extend(quadsplit([nVertices, nVertices + 1 , iw - 1, 0]))
+        F1.extend(quadsplit([nVertices + 2, nVertices, 0, nVertices - iw]))
+        F1.extend(quadsplit([nVertices + 2, nVertices - iw, nVertices - 1, nVertices + 3]))
+        F1.extend(quadsplit([nVertices + 1, nVertices + 3, nVertices - 1, iw - 1]))
 
-    X = X * w / iw
-    Y = Y * h / ih
-    faces.extend(F1)
+        X = np.concatenate([X, np.array(X1)])
+        Y = np.concatenate([Y, np.array(Y1)])
+        Z = np.concatenate([Z, np.array(Z1)])
+
+        X = X * w / iw
+        Y = Y * h / ih
+        faces.extend(F1)
 
     F = np.array(faces)
     V = np.vstack([X, Y, Z]).transpose()

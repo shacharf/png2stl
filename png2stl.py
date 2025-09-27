@@ -1,10 +1,13 @@
-import os
-import sys
 import argparse
+
 import cv2
 import numpy as np
-import stl
 from stl import mesh
+from typing import Sequence
+import structlog
+
+
+logger = structlog.get_logger()
 
 
 def parse_args():
@@ -22,21 +25,46 @@ def parse_args():
 
 
 
-def quadsplit(quad):
+def quadsplit(quad: Sequence[float]) -> list[list[float]]:
     """Split ccw quad to two triangles"""
     v1, v2, v3, v4 = quad
     return [
         [v1, v2, v3],
         [v3, v4, v1]]
 
+def boundary_aware_quad_gen(im_is_in_shape: np.ndarray, u: int, v: int) -> list[list[int]]:
+    """
+    generate 0, 1 or 2 CCW triangles
+    if on the boundayr, try both splitting option and generate the one with most triangles
+    """
+    im = im_is_in_shape
+    ih, iw = im.shape
 
-def flip(t):
+    def c2i(u, v):
+        """coordinate to index"""
+        return v * iw + u
+
+    vertices = [c2i(u, v), c2i(u+1, v), c2i(u+1, v+1), c2i(u, v+1)]
+    inside = [im[v, u], im[v, u+1], im[v+1, u+1], im[v+1, u]]
+    v1,v2,v3,v4 = vertices
+    if all(inside):
+        return [
+        [v1, v2, v3],
+        [v3, v4, v1]]
+    else:
+        triangles = [[0,1,2], [2,3,0], [0,1,3], [1,2,3]]
+        trinagles = list(filter(lambda t: all(inside[x] for x in t), triangles))
+        triangles = [[vertices[x] for x in t] for t in trinagles]
+        assert len(trinagles) < 2
+        return triangles
+
+
+def flip(t: Sequence[float]) -> list[float]:
     """
     Flip a triangle t = [v1, v2, v3]
     """
     v1, v2, v3 = t
-    t = [v1, v3, v2]
-    return t
+    return [v1, v3, v2]
 
 
 class Im2stl:
@@ -64,7 +92,13 @@ class Im2stl:
         self.height0 = im.min()
         self.height1 = im.max()
         self.dheight = self.height1 - self.height0
+        if self.dheight == 0:
+            if self.height1 == 0:
+                logger.error("Empty input image - aborting")
+                raise ValueError("Empty input image - aborting")
+            self.dheight = self.height1
 
+        logger.info(f"height0: {self.height0}, height1: {self.height1}, dheight: {self.dheight}")
         # output vertices and faces
         self.V = []
         self.F = []
@@ -82,13 +116,18 @@ class Im2stl:
 #        cv2.imshow("bw", imbw)
 #        cv2.waitKey(1)
         contours, hierarchy = cv2.findContours(imbw, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        contourimage = np.zeros(imbw.shape)
-        print(f"Coontours: {len(contours[0])}")
-#        cv2.drawContours(contourimage, contours, -1, 255, lineType=cv2.LINE_8)
-#        cv2.imshow("cont", contourimage)
-#        cv2.waitKey(-1)
-        
-#        self.contourimage = contourimage
+        if not contours:
+            ih, iw = imbw.shape
+            rect = np.array([[[0, 0]],
+                             [[iw - 1, 0]],
+                             [[iw - 1, ih - 1]],
+                             [[0, ih - 1]]], dtype=np.int32)
+            contours = [rect]
+            hierarchy = np.array([[[ -1, -1, -1, -1 ]]], dtype=np.int32)
+        # contourimage = np.zeros(imbw.shape)
+        # cv2.drawContours(contourimage, contours, -1, 255, lineType=cv2.LINE_8)
+        # cv2.imshow("cont", contourimage)
+        # cv2.waitKey(-1)
         self.contours = contours
         self.hierarchy = hierarchy
 
@@ -101,9 +140,9 @@ class Im2stl:
         shape_height = self.shape_height
         heightfield_height = self.heightfield_height
 
-        print(f"Image resolution: {iw} x {ih}")
-        print(f"object height: {shape_height}")
-        print(f"engrave: {self.engrave}, h: {heightfield_height}")
+        logger.info(f"Image resolution: {iw} x {ih}")
+        logger.info(f"object height: {shape_height}")
+        logger.info(f"engrave: {self.engrave}, h: {heightfield_height}")
         
         def c2i(u, v):
             """coordinate to index"""
@@ -139,8 +178,9 @@ class Im2stl:
         faces = []
         for v in range(ih - 1):
             for u in range(iw - 1):
-                triangles = quadsplit([c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)])
-                triangles = list(filter(is_in_shape, triangles))
+                # triangles = quadsplit([c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)])
+                # triangles = list(filter(is_in_shape, triangles))
+                triangles = boundary_aware_quad_gen(im, u, v)
                 triangles2 = []
                 for t in triangles:
                     triangles2.append([ti + bottom_start for ti in t])
@@ -283,7 +323,6 @@ def save_stl(outpath, V, F):
         for j in range(3):
             shape.vectors[i][j] = V[f[j], :]
     shape.save(outpath)
-#    shape.save(outpath, mode=stl.Mode.ASCII)
 
 
 def main():

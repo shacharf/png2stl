@@ -133,3 +133,9 @@ dmypy.json
 *.jpg
 *.jpeg
 *.stl
+
+# Git
+.venv*/
+
+# pycharm
+.idea/*

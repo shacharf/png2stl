@@ -55,9 +55,10 @@ def parse_args():
 
 
 def quadsplit(quad: Sequence[float]) -> list[list[float]]:
-    """Split ccw quad to two triangles"""
+    """Split ccw quad to two triangles, optionally flipping winding"""
     v1, v2, v3, v4 = quad
-    return [[v1, v2, v3], [v3, v4, v1]]
+    triangles = [[v1, v2, v3], [v3, v4, v1]]
+    return triangles
 
 
 def boundary_aware_quad_gen(
@@ -74,11 +75,12 @@ def boundary_aware_quad_gen(
         """coordinate to index"""
         return v * iw + u
 
-    vertices = [c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)]
-    inside = [im[v, u], im[v, u + 1], im[v + 1, u + 1], im[v + 1, u]]
+    vertices = [c2i(u, v), c2i(u, v + 1), c2i(u + 1, v + 1), c2i(u + 1, v)]
+    inside = [im[v, u], im[v + 1, u], im[v + 1, u + 1], im[v, u + 1]]
     v1, v2, v3, v4 = vertices
     if all(inside):
-        return [[v1, v2, v3], [v3, v4, v1]]
+        triangles = [[v1, v2, v3], [v3, v4, v1]]
+        return triangles
     else:
         triangles = [[0, 1, 2], [2, 3, 0], [0, 1, 3], [1, 2, 3]]
         trinagles = list(filter(lambda t: all(inside[x] for x in t), triangles))
@@ -215,15 +217,13 @@ class Im2stl:
         for v in range(ih - 1):
             for u in range(iw - 1):
                 triangles = boundary_aware_quad_gen(im, u, v)
-                if len(triangles) > 0:
-                    faces.extend(triangles)
+                faces.extend(triangles)
+
                 if not self.nobottom:
-                    triangles_bottom = []
-                    for t in triangles:
-                        triangles_bottom.append([ti + bottom_start for ti in t])
-                    triangles_bottom = [flip(t) for t in triangles_bottom]
-                    if len(triangles_bottom) > 0:
-                        faces.extend(triangles_bottom)
+                    triangles_bottom = [
+                        flip([ti + bottom_start for ti in t]) for t in triangles
+                    ]
+                    faces.extend(triangles_bottom)
 
         X = np.concatenate([X, Xlow])
         Y = np.concatenate([Y, Ylow])
@@ -262,7 +262,7 @@ class Im2stl:
             v3idx = self.c2i(x2, y2, True)
             v4idx = self.c2i(x1, y1, True)
 
-            triangles = quadsplit([v1idx, v2idx, v3idx, v4idx])
+            triangles = quadsplit([v1idx, v4idx, v3idx, v2idx])
             sfaces.extend(triangles)
         self.F.extend(sfaces)
 
@@ -313,7 +313,7 @@ def im2stl(
     for v in range(ih - 1):
         for u in range(iw - 1):
             faces.extend(
-                quadsplit([c2i(u, v), c2i(u + 1, v), c2i(u + 1, v + 1), c2i(u, v + 1)])
+                quadsplit([c2i(u, v), c2i(u, v + 1), c2i(u + 1, v + 1), c2i(u + 1, v)])
             )
 
     # Close the shape
@@ -325,14 +325,14 @@ def im2stl(
 
         if not nobottom:
             F1.extend(
-                quadsplit([nVertices, nVertices + 2, nVertices + 3, nVertices + 1])
+                quadsplit([nVertices, nVertices + 1, nVertices + 3, nVertices + 2])
             )
-        F1.extend(quadsplit([nVertices, nVertices + 1, iw - 1, 0]))
-        F1.extend(quadsplit([nVertices + 2, nVertices, 0, nVertices - iw]))
+        F1.extend(quadsplit([nVertices, 0, iw - 1, nVertices + 1]))
+        F1.extend(quadsplit([nVertices + 2, nVertices - iw, 0, nVertices]))
         F1.extend(
-            quadsplit([nVertices + 2, nVertices - iw, nVertices - 1, nVertices + 3])
+            quadsplit([nVertices + 2, nVertices + 3, nVertices - 1, nVertices - iw])
         )
-        F1.extend(quadsplit([nVertices + 1, nVertices + 3, nVertices - 1, iw - 1]))
+        F1.extend(quadsplit([nVertices + 1, iw - 1, nVertices - 1, nVertices + 3]))
 
         X = np.concatenate([X, np.array(X1)])
         Y = np.concatenate([Y, np.array(Y1)])

@@ -11,7 +11,7 @@ Convert png as height map to stl
 * 25-09-27 - Fixed holes in mesh
 * 25-09-27 - Added --noside and --nobottom options
 * 25-09-27 - Added pre-commit hooks
-
+* 25-09-27 - Fixed bug: geometry is flipped
 
 # Development
 
